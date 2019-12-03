@@ -6,9 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	"crypto/rand"
-
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 var logger *logrus.Logger
@@ -19,7 +17,7 @@ func run(args []string) int {
 	tlsListenPort := flag.Int("tlsport", 25443, "port number to listen on with TLS")
 	// 5,242,880 bytes == 5 MiB
 	maxUploadSize := flag.Int64("upload_limit", 5242880, "max size of uploaded file (byte)")
-	tokenFlag := flag.String("token", "", "specify the security token (it is automatically generated if empty)")
+	// tokenFlag := flag.String("token", "", "specify the security token (it is automatically generated if empty)")
 	logLevelFlag := flag.String("loglevel", "info", "logging level")
 	certFile := flag.String("cert", "", "path to certificate file")
 	keyFile := flag.String("key", "", "path to key file")
@@ -34,29 +32,31 @@ func run(args []string) int {
 	} else {
 		logger.Level = logLevel
 	}
-	token := *tokenFlag
-	if token == "" {
-		count := 10
-		b := make([]byte, count)
-		if _, err := rand.Read(b); err != nil {
-			logger.WithError(err).Fatal("could not generate token")
-			return 1
-		}
-		token = fmt.Sprintf("%x", b)
-		logger.WithField("token", token).Warn("token generated")
-	}
+	// token := *tokenFlag
+	// if token == "" {
+	// 	count := 10
+	// 	b := make([]byte, count)
+	// 	if _, err := rand.Read(b); err != nil {
+	// 		logger.WithError(err).Fatal("could not generate token")
+	// 		return 1
+	// 	}
+	// 	token = fmt.Sprintf("%x", b)
+	// 	logger.WithField("token", token).Warn("token generated")
+	// }
 	tlsEnabled := *certFile != "" && *keyFile != ""
-	server := NewServer(serverRoot, *maxUploadSize, token)
+	// server := NewServer(serverRoot, *maxUploadSize, token)
+	server := NewServer(serverRoot, *maxUploadSize)
 	http.Handle("/upload", server)
-	http.Handle("/files/", server)
+	// http.Handle("/files/", server)
+	http.Handle("/", server)
 
 	errors := make(chan error)
 
 	go func() {
 		logger.WithFields(logrus.Fields{
-			"ip":           *bindAddress,
-			"port":         *listenPort,
-			"token":        token,
+			"ip":   *bindAddress,
+			"port": *listenPort,
+			// "token":        token,
 			"upload_limit": *maxUploadSize,
 			"root":         serverRoot,
 		}).Info("start listening")
@@ -87,6 +87,7 @@ func run(args []string) int {
 }
 
 func main() {
+	fmt.Println("123")
 	logger = logrus.New()
 	logger.Info("starting up simple-upload-server")
 

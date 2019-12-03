@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/sha1"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,38 +11,42 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
+	"github.com/artdarek/go-unzip"
 )
 
 // Server represents a simple-upload server.
 type Server struct {
 	DocumentRoot string
 	// MaxUploadSize limits the size of the uploaded content, specified with "byte".
-	MaxUploadSize int64
-	SecureToken   string
+	// MaxUploadSize int64
+	// SecureToken   string
 }
 
 // NewServer creates a new simple-upload server.
-func NewServer(documentRoot string, maxUploadSize int64, token string) Server {
+// func NewServer(documentRoot string, maxUploadSize int64, token string) Server {
+func NewServer(documentRoot string, maxUploadSize int64) Server {
 	return Server{
-		DocumentRoot:  documentRoot,
-		MaxUploadSize: maxUploadSize,
-		SecureToken:   token,
+		DocumentRoot: documentRoot,
+		// MaxUploadSize: maxUploadSize,
+		// SecureToken:   token,
 	}
 }
 
 func (s Server) handleGet(w http.ResponseWriter, r *http.Request) {
-	re := regexp.MustCompile(`^/files/([^/]+)$`)
-	if !re.MatchString(r.URL.Path) {
-		w.WriteHeader(http.StatusNotFound)
-		writeError(w, fmt.Errorf("\"%s\" is not found", r.URL.Path))
-		return
-	}
-	http.StripPrefix("/files/", http.FileServer(http.Dir(s.DocumentRoot))).ServeHTTP(w, r)
+	// re := regexp.MustCompile(`^/files/([^/]+)$`)
+	// if !re.MatchString(r.URL.Path) {
+	// 	w.WriteHeader(http.StatusNotFound)
+	// 	writeError(w, fmt.Errorf("\"%s\" is not found", r.URL.Path))
+	// 	return
+	// }
+	// http.StripPrefix("/files/", http.FileServer(http.Dir(s.DocumentRoot))).ServeHTTP(w, r)
+	http.FileServer(http.Dir(s.DocumentRoot)).ServeHTTP(w, r)
 }
 
 func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	srcFile, info, err := r.FormFile("file")
+
 	if err != nil {
 		logger.WithError(err).Error("failed to acquire the uploaded content")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -51,7 +54,8 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer srcFile.Close()
-	logger.Debug(info)
+	// logger.Debug(info)
+	// logger.Info(info)
 	size, err := getSize(srcFile)
 	if err != nil {
 		logger.WithError(err).Error("failed to get the size of the uploaded content")
@@ -59,12 +63,12 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if size > s.MaxUploadSize {
-		logger.WithField("size", size).Info("file size exceeded")
-		w.WriteHeader(http.StatusRequestEntityTooLarge)
-		writeError(w, errors.New("uploaded file size exceeds the limit"))
-		return
-	}
+	// if size > s.MaxUploadSize {
+	// 	logger.WithField("size", size).Info("file size exceeded")
+	// 	w.WriteHeader(http.StatusRequestEntityTooLarge)
+	// 	writeError(w, errors.New("uploaded file size exceeds the limit"))
+	// 	return
+	// }
 
 	body, err := ioutil.ReadAll(srcFile)
 	if err != nil {
@@ -73,7 +77,11 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+
 	filename := info.Filename
+
+	fmt.Println("filename=", filename)
+
 	if filename == "" {
 		filename = fmt.Sprintf("%x", sha1.Sum(body))
 	}
@@ -86,7 +94,7 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	defer dstFile.Close()
+	
 	if written, err := dstFile.Write(body); err != nil {
 		logger.WithError(err).WithField("path", dstPath).Error("failed to write the content")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -100,6 +108,8 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		writeError(w, fmt.Errorf("the size of uploaded content is %d, but %d bytes written", size, written))
 	}
+	dstFile.Close()
+
 	uploadedURL := strings.TrimPrefix(dstPath, s.DocumentRoot)
 	if !strings.HasPrefix(uploadedURL, "/") {
 		uploadedURL = "/" + uploadedURL
@@ -110,11 +120,27 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		"url":  uploadedURL,
 		"size": size,
 	}).Info("file uploaded by POST")
+
+	if strings.HasSuffix(dstPath, ".zip"){
+		fmt.Println("unzipping")
+
+		uz := unzip.New(dstPath, s.DocumentRoot)
+		err := uz.Extract()
+		if err != nil {
+			fmt.Println(err)
+		}
+	
+	}
+
+
 	w.WriteHeader(http.StatusOK)
 	writeSuccess(w, uploadedURL)
 }
 
 func (s Server) handlePut(w http.ResponseWriter, r *http.Request) {
+
+	fmt.Println("path=", r.URL.Path)
+
 	re := regexp.MustCompile(`^/files/([^/]+)$`)
 	matches := re.FindStringSubmatch(r.URL.Path)
 	if matches == nil {
@@ -144,22 +170,22 @@ func (s Server) handlePut(w http.ResponseWriter, r *http.Request) {
 	// dump headers for the file
 	logger.Debug(info.Header)
 
-	size, err := getSize(srcFile)
+	// size, err := getSize(srcFile)
 	if err != nil {
 		logger.WithError(err).WithField("path", targetPath).Error("failed to get the size of the uploaded content")
 		w.WriteHeader(http.StatusInternalServerError)
 		writeError(w, err)
 		return
 	}
-	if size > s.MaxUploadSize {
-		logger.WithFields(logrus.Fields{
-			"path": targetPath,
-			"size": size,
-		}).Info("file size exceeded")
-		w.WriteHeader(http.StatusRequestEntityTooLarge)
-		writeError(w, errors.New("uploaded file size exceeds the limit"))
-		return
-	}
+	// if size > s.MaxUploadSize {
+	// 	logger.WithFields(logrus.Fields{
+	// 		"path": targetPath,
+	// 		"size": size,
+	// 	}).Info("file size exceeded")
+	// 	w.WriteHeader(http.StatusRequestEntityTooLarge)
+	// 	writeError(w, errors.New("uploaded file size exceeds the limit"))
+	// 	return
+	// }
 
 	n, err := io.Copy(file, srcFile)
 	if err != nil {
@@ -178,16 +204,16 @@ func (s Server) handlePut(w http.ResponseWriter, r *http.Request) {
 
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// first, try to get the token from the query strings
-	token := r.URL.Query().Get("token")
+	// token := r.URL.Query().Get("token")
 	// if token is not found, check the form parameter.
-	if token == "" {
-		token = r.Form.Get("token")
-	}
-	if token != s.SecureToken {
-		w.WriteHeader(http.StatusUnauthorized)
-		writeError(w, fmt.Errorf("authentication required"))
-		return
-	}
+	// if token == "" {
+	// 	token = r.Form.Get("token")
+	// }
+	// if token != s.SecureToken {
+	// 	w.WriteHeader(http.StatusUnauthorized)
+	// 	writeError(w, fmt.Errorf("authentication required"))
+	// 	return
+	// }
 
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:

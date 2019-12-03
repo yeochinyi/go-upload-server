@@ -112,3 +112,4 @@ NOTE: The token is generated from the random number, so it will change every tim
 ```
 $ docker run -p 25478:25478 -v $HOME/tmp:/var/root mayth/simple-upload-server app -token f9403fc5f537b4ab332d /var/root
 ```
+find . -type f -exec curl -F file=@{} http://localhost:25478 \;
