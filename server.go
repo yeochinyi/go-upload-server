@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"github.com/artdarek/go-unzip"
+	"github.com/sirupsen/logrus"
 )
 
 // Server represents a simple-upload server.
@@ -25,7 +25,7 @@ type Server struct {
 
 // NewServer creates a new simple-upload server.
 // func NewServer(documentRoot string, maxUploadSize int64, token string) Server {
-func NewServer(documentRoot string, maxUploadSize int64) Server {
+func NewServer(documentRoot string) Server {
 	return Server{
 		DocumentRoot: documentRoot,
 		// MaxUploadSize: maxUploadSize,
@@ -94,7 +94,7 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	
+
 	if written, err := dstFile.Write(body); err != nil {
 		logger.WithError(err).WithField("path", dstPath).Error("failed to write the content")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -121,7 +121,7 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		"size": size,
 	}).Info("file uploaded by POST")
 
-	if strings.HasSuffix(dstPath, ".zip"){
+	if strings.HasSuffix(dstPath, ".zip") {
 		fmt.Println("unzipping")
 
 		uz := unzip.New(dstPath, s.DocumentRoot)
@@ -129,9 +129,8 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			fmt.Println(err)
 		}
-	
-	}
 
+	}
 
 	w.WriteHeader(http.StatusOK)
 	writeSuccess(w, uploadedURL)
